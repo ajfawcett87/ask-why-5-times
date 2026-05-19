@@ -14,8 +14,8 @@ with st.sidebar:
         st.info("💡 Tip: Upload 'logo.png' to your GitHub repository to see your logo here!")
     
     st.markdown("### 🎓 Course Portal")
-    st.write("**Course:** Effective Farmer Communication")
-    st.write("**Organization:** Your Organization Name")
+    st.write("**Course:** The Farm-Gate Influence Lab")
+    st.write("**Organization:** EmpowerAg Ltd")
     st.markdown("---")
     st.markdown(
         "### 📜 Core Rules Reminder:\n"
