@@ -1,14 +1,35 @@
 import streamlit as st
+import os
 
 # --- APPLICATION SETUP ---
 st.set_page_config(page_title="Farm Adviser Training Simulator", page_icon="🚜", layout="centered")
 
+# --- CUSTOM BRANDING & LOGO SIDEBAR ---
+with st.sidebar:
+    # Check if the logo file exists in the GitHub folder
+    if os.path.exists("logo.png"):
+        st.image("logo.png", use_container_width=True)
+    else:
+        # Fallback text placeholder if the logo isn't uploaded yet
+        st.info("💡 Tip: Upload 'logo.png' to your GitHub repository to see your logo here!")
+    
+    st.markdown("### 🎓 Course Portal")
+    st.write("**Course:** Effective Farmer Communication")
+    st.write("**Organization:** Your Organization Name")
+    st.markdown("---")
+    st.markdown(
+        "### 📜 Core Rules Reminder:\n"
+        "1. **Validate First:** Acknowledge their stress/hesitation.\n"
+        "2. **Open Starters:** Use *What*, *How*, or *Tell me about...*\n"
+        "3. **No Closed Questions:** Ban *Do you*, *Have you*, *Is it*."
+    )
+
+# --- MAIN PAGE HEADER ---
 st.title("🚜 Farm Adviser Chatbot Simulator")
 st.subheader("Mastering the '5 Whys' Through Open Questions")
 st.write(
     "**Objective:** Guide your farmer client from their surface-level objection down to their core "
-    "root cause. You must use **empathy/validation** and **open questions** (What, How, Tell me about...). "
-    "Avoid closed questions (Do, Is, Have, Can)."
+    "root cause. You must use **empathy/validation** and **open questions**. Avoid closed questions."
 )
 st.markdown("---")
 
@@ -31,7 +52,7 @@ SCENARIOS = {
                 "hint": "Acknowledge that terrible past experience and the loss of money, then ask an open question about how that affects her view of this new system."
             },
             4: {
-                "text": "Stockmanship is what I’m good at. It’s what my dad taught me. If I let a computer make the breeding decisions, I feel like I’m just a button-pusher on my own land.",
+                "text": "Stockmanship is what I’ve good at. It’s what my dad taught me. If I let a computer make the breeding decisions, I feel like I’m just a button-pusher on my own land.",
                 "hint": "Validate how important her identity and heritage as a hands-on stockwoman are, then ask an open question about her deeper concerns regarding the future of her role."
             },
             5: {
@@ -69,7 +90,6 @@ SCENARIOS = {
     "Scenario 3: The Burnout Case (Tom)": {
         "farmer_name": "Tom",
         "topic": "Reducing fertilizer inputs and stocking density for a new subsidy scheme",
-        "farmer_type": "exhausted",
         "layers": {
             1: {
                 "text": "Less stock means less output. You don't make money by producing less food, no matter what the government says.",
@@ -115,11 +135,9 @@ if "current_scenario_name" not in st.session_state or st.session_state.current_s
 def evaluate_input(user_text):
     text_lower = user_text.lower().strip()
     
-    # 1. Closed Question Check
     closed_starters = ["do ", "does ", "is ", "are ", "have ", "has ", "can ", "could ", "should ", "would ", "will ", "did ", "am "]
     is_closed = any(text_lower.startswith(starter) for starter in closed_starters) or (text_lower.endswith("?") and any(text_lower.startswith(s) for s in closed_starters))
     
-    # 2. Open Question Check
     open_starters = ["what", "how", "tell me", "why", "describe", "share", "explain"]
     is_open = any(starter in text_lower for starter in open_starters)
     
@@ -129,7 +147,6 @@ def evaluate_input(user_text):
     if not is_open:
         return False, "Your response didn't seem to include a clear, **open-ended question** (using What, How, or 'Tell me about...')."
     
-    # 3. Empathy Evaluation
     empathy_keywords = ["understand", "makes sense", "fair enough", "appreciate", "tough", "worry", "risk", "agree", "sounds like", "sorry to hear"]
     has_empathy = any(word in text_lower for word in empathy_keywords) or len(user_text) > 25
     
