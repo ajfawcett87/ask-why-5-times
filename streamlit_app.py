@@ -237,84 +237,87 @@ MAX_LAYERS = 5
 MAX_ATTEMPTS_PER_LAYER = 3
 
 
-# --- IMPROVED EVALUATION ENGINE ---
+# --- EVALUATION ENGINE ---
 def evaluate_response(user_text):
     """
     Returns: (passed: bool, rule_broken: str|None, feedback: str)
-    rule_broken is one of: "closed_question", "no_open_question", "no_validation", None
+
+    Changes from v1:
+    - Rule 3: Only flags sentences that actually end with '?' AND start with a closed word.
+              Statements like "Would be a shame" or "Can see why" no longer trigger it.
+    - Rule 1: Much broader empathy keyword list + automatic pass for responses over 20 words
+              (if someone writes a proper paragraph, assume they tried to validate).
+    - Rule 2: Patterns now require '?' for what/how to reduce false negatives on statements.
     """
     text = user_text.strip()
     text_lower = text.lower()
 
-    # Too short to be a proper response
     if len(text.split()) < 4:
         return False, "no_validation", (
-            "That's too brief to count as a real response. "
-            "A single word or short phrase isn't enough — your farmer needs to feel heard."
+            "That's too brief — your farmer needs to feel heard before they'll open up."
         )
 
-    # Rule 3: Check for closed question starters
-    # Must check the actual question part, not just the opening words
-    sentences = re.split(r'[.!?]+', text_lower)
-    questions = [s.strip() for s in sentences if '?' in text_lower or any(
-        s.strip().startswith(starter) for starter in [
-            "do ", "does ", "is ", "are ", "have ", "has ",
-            "can ", "could ", "should ", "would ", "will ", "did ", "am "
-        ]
-    )]
-
+    # Rule 3: Closed question — only flag if the sentence actually ends with ?
+    sentences = re.split(r'(?<=[.!?])\s+', text)
     closed_starters = [
-        "do ", "does ", "is ", "are ", "have ", "has ",
-        "can ", "could ", "should ", "would ", "will ", "did ", "am "
+        "do you", "does that", "have you", "has that", "is that", "is it",
+        "are you", "can you", "could you", "would you", "will you", "did you",
+        "am i", "should you"
     ]
     for sentence in sentences:
-        sentence = sentence.strip()
-        if any(sentence.startswith(s) for s in closed_starters) and len(sentence) > 3:
-            return False, "closed_question", (
-                "⚠️ **Rule 3 broken — Closed question detected.** "
-                f"Your response appears to start a question with a closed word like 'Do', 'Have', 'Is', or 'Can'. "
-                "These put farmers on the defensive. Swap it for 'What' or 'How' instead."
-            )
+        s = sentence.strip().lower()
+        if s.endswith('?'):
+            if any(s.startswith(c) for c in closed_starters):
+                return False, "closed_question", (
+                    "⚠️ **Rule 3 broken — Closed question detected.** "
+                    "You asked something starting with 'Do you', 'Have you', 'Can you' etc. "
+                    "Swap it for 'What' or 'How' — it opens them up instead of shutting them down."
+                )
 
-    # Rule 2: Must contain an open question
+    # Rule 2: Must contain an open question (what/how must be in a sentence ending with ?)
     open_patterns = [
-        r'\bwhat\b', r'\bhow\b', r'\btell me\b', r'\bdescribe\b',
-        r'\bwalk me through\b', r'\bhelp me understand\b', r'\bexplain\b',
-        r'\bwhat\'s\b', r'\bwhat is\b', r'\bhow does\b', r'\bhow has\b',
-        r'\bhow do\b', r'\bwhat does\b', r'\bwhat has\b', r'\bwhat would\b',
-        r'\bwhat do\b', r'\bwhat are\b', r'\bwhat were\b', r'\bwhat might\b',
+        r'\bwhat\b.*\?',
+        r'\bhow\b.*\?',
+        r'\btell me\b',
+        r'\bwalk me through\b',
+        r'\bhelp me understand\b',
+        r'\bexplain\b.*\?',
+        r'\bdescribe\b.*\?',
     ]
     has_open = any(re.search(p, text_lower) for p in open_patterns)
 
     if not has_open:
         return False, "no_open_question", (
             "⚠️ **Rule 2 broken — No open question found.** "
-            "Your response needs a question that starts with 'What', 'How', or 'Tell me about...' "
-            "to keep the farmer talking. A statement on its own won't do it."
+            "End with a question starting 'What', 'How', or 'Tell me about...' to keep them talking."
         )
 
-    # Rule 1: Must include some form of validation/acknowledgement
-    # Check for empathy/validation keywords OR a reasonable length acknowledgement
+    # Rule 1: Validation — broad keyword list + length fallback
     empathy_patterns = [
-        r'\bunderstand\b', r'\bmakes sense\b', r'\bfair enough\b',
-        r'\bappreciate\b', r'\btough\b', r'\bdifficult\b', r'\bhard\b',
+        r'\bunderstand\b', r'\bmakes sense\b', r'\bfair enough\b', r'\bfair point\b',
+        r'\bappreciate\b', r'\btough\b', r'\bdifficult\b', r'\bhard\b', r'\brough\b',
         r'\bfrustrat\b', r'\bworry\b', r'\bconcern\b', r'\bright to\b',
-        r'\bsounds like\b', r'\bseem(s)?\b', r'\bfeel(s)?\b',
-        r'\bthat must\b', r'\bno wonder\b', r'\bcompletely\b',
-        r'\bunderstandable\b', r'\btotally\b', r'\bof course\b',
-        r'\bcan see why\b', r'\bcan understand\b', r'\bget that\b',
-        r'\brespect\b', r'\bcredit\b', r'\bwhat you\'ve\b', r'\byears of\b',
-        r'\bexperience\b', r'\bhistory\b', r'\bknow your\b',
+        r'\bsounds like\b', r'\bseems like\b', r'\bfeel(s)?\b',
+        r'\bthat must\b', r'\bno wonder\b', r'\bunderstandable\b',
+        r'\btotally\b', r'\bof course\b', r'\bcan see\b', r'\bget that\b',
+        r'\brespect\b', r'\bcredit\b', r'\bexperience\b', r'\bknow your\b',
+        r'\bknow what you\b', r'\byears\b', r'\bnot easy\b', r'\bno small\b',
+        r'\bthat\'s\b', r'\bthat is\b',
+        r'\bwhat you\b', r'\bbeen through\b', r'\bgoing through\b',
+        r'\bit\'s clear\b', r'\bclearly\b', r'\bobviously\b',
+        r'\breal(ly)?\b', r'\bproperly\b', r'\bserious\b',
     ]
     has_empathy = any(re.search(p, text_lower) for p in empathy_patterns)
 
-    # Give benefit of the doubt if response is substantial (they tried to acknowledge something)
-    # but only if it's long enough to plausibly contain validation
-    if not has_empathy and len(text.split()) < 15:
+    # Benefit of the doubt: if response is 20+ words, assume they attempted validation
+    if not has_empathy and len(text.split()) >= 20:
+        has_empathy = True
+
+    if not has_empathy:
         return False, "no_validation", (
             "⚠️ **Rule 1 broken — No validation found.** "
-            "You went straight to a question without acknowledging what your farmer said first. "
-            "They need to feel heard before they'll open up. Add a sentence that shows you understood their concern."
+            "Add one sentence showing you heard what they said before asking your question. "
+            "Something like 'That makes sense' or 'That sounds really tough' is enough to start."
         )
 
     return True, None, "Good response — clear validation and an open question."
@@ -367,8 +370,8 @@ if "current_scenario_name" not in st.session_state or st.session_state.current_s
     st.session_state.layer_attempts = 0
     st.session_state.total_strikes = 0
     st.session_state.scenarios_completed = 0
-    st.session_state.layer_strike_log = {}  # {layer: strike_count}
-    st.session_state.rules_broken_log = []  # list of rule names broken
+    st.session_state.layer_strike_log = {}
+    st.session_state.rules_broken_log = []
     st.session_state.chat_history = [
         {"role": "farmer", "text": f"**{farmer_name}:** {active_scenario['layers'][1]['text']}"}
     ]
@@ -425,22 +428,17 @@ if st.session_state.game_over:
     st.success(f"🎉 **Simulation complete!** You guided {farmer_name} to their root cause.")
     st.session_state.scenarios_completed = st.session_state.get("scenarios_completed", 0) + 1
 
-    # End of session summary
     st.markdown("### 📊 Your Performance Summary")
 
     total_s = st.session_state.total_strikes
     if total_s == 0:
         rating = "🏆 Excellent — clean run, no mistakes"
-        rating_color = "success"
     elif total_s <= 2:
         rating = "✅ Good — a couple of wobbles but you got there"
-        rating_color = "success"
     elif total_s <= 5:
         rating = "⚠️ Fair — worth reviewing the rules before your next run"
-        rating_color = "warning"
     else:
         rating = "❌ Needs work — focus on validation and open questions"
-        rating_color = "error"
 
     st.info(f"**Overall:** {rating}")
     st.write(f"**Total strikes:** {total_s}")
@@ -462,7 +460,6 @@ if st.session_state.game_over:
         }
         for rule, count in rule_counts.most_common():
             st.write(f"- {rule_labels.get(rule, rule)}: **{count}x**")
-        # Targeted advice
         most_common = rule_counts.most_common(1)[0][0]
         if most_common == "closed_question":
             st.warning("**Focus area:** Practise rewriting your questions. Start every question with 'What' or 'How' and see if it still makes sense.")
@@ -492,14 +489,12 @@ elif user_input := st.chat_input(f"Your response to {farmer_name}..."):
     passed, rule_broken, feedback_msg = evaluate_response(user_input)
 
     if passed:
-        # Reset strike/attempt counters for this layer
         st.session_state.strikes = 0
         st.session_state.layer_attempts = 0
 
         next_layer = st.session_state.layer + 1
 
         if next_layer > MAX_LAYERS:
-            # Final layer reached
             farmer_reply = get_farmer_reply(active_scenario, MAX_LAYERS, user_input)
             st.session_state.chat_history.append({"role": "farmer", "text": farmer_reply})
             st.session_state.game_over = True
@@ -509,20 +504,16 @@ elif user_input := st.chat_input(f"Your response to {farmer_name}..."):
             st.session_state.layer = next_layer
 
     else:
-        # Failed response
         st.session_state.strikes += 1
         st.session_state.total_strikes += 1
 
-        # Log which rule was broken
         if rule_broken:
             st.session_state.rules_broken_log.append(rule_broken)
-            # Track per layer
             layer_key = st.session_state.layer
             st.session_state.layer_strike_log[layer_key] = \
                 st.session_state.layer_strike_log.get(layer_key, 0) + 1
 
         if st.session_state.strikes >= MAX_ATTEMPTS_PER_LAYER:
-            # Max attempts reached — show hint and auto-advance
             hint = active_scenario["layers"][st.session_state.layer]["hint"]
             coach_msg = (
                 f"{feedback_msg}\n\n"
@@ -533,7 +524,6 @@ elif user_input := st.chat_input(f"Your response to {farmer_name}..."):
             st.session_state.strikes = 0
             st.session_state.layer_attempts = 0
 
-            # Auto-advance
             next_layer = st.session_state.layer + 1
             if next_layer > MAX_LAYERS:
                 st.session_state.game_over = True
@@ -542,7 +532,6 @@ elif user_input := st.chat_input(f"Your response to {farmer_name}..."):
                 st.session_state.chat_history.append({"role": "farmer", "text": farmer_reply})
                 st.session_state.layer = next_layer
         else:
-            # Still has attempts left — show feedback and let them try again
             attempts_left = MAX_ATTEMPTS_PER_LAYER - st.session_state.strikes
             farmer_reply = get_farmer_reply(
                 active_scenario,
